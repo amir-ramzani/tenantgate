@@ -1,0 +1,16 @@
+{
+  "app": "python3 app.py",
+  "watch": {
+    "include": ["app.py", "stacks/**"]
+  },
+  "context": {
+    "stage": "dev",
+    "primary_region": "ap-southeast-1",
+    "secondary_region": "ap-southeast-2",
+    "multi_region": "false",
+    "activate_replica": "false",
+    "@aws-cdk/core:checkSecretUsage": true,
+    "@aws-cdk/aws-iam:minimizePolicies": true,
+    "@aws-cdk/aws-lambda:recognizeLayerVersion": true
+  }
+}
