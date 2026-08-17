@@ -1,0 +1,62 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --group dev --group infra
+      - name: Lint
+        run: |
+          uv run ruff check src tests infra scripts
+          uv run ruff format --check src tests infra scripts
+      - name: Type-check
+        run: uv run mypy
+      - name: OpenAPI specs up to date
+        run: |
+          if ! uv run python scripts/export_openapi.py --check; then
+            echo "::error file=docs/openapi::OpenAPI specs are stale. Run 'uv run python scripts/export_openapi.py' and commit docs/openapi/."
+            exit 1
+          fi
+      - name: Unit tests
+        run: uv run pytest --cov --cov-report=term-missing
+
+  synth:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: uv python install 3.12
+      - run: uv sync --frozen --group infra
+      - name: Build Lambda asset
+        run: ./scripts/build_lambda.sh
+      - name: Synth (single- and multi-Region)
+        working-directory: infra
+        env:
+          CDK_DEFAULT_ACCOUNT: "111111111111"
+        run: |
+          npx --yes aws-cdk@2 synth --quiet -c domain_name=example.com -c hosted_zone_id=Z000000000000
+          npx --yes aws-cdk@2 synth --quiet -c domain_name=example.com -c hosted_zone_id=Z000000000000 \
+            -c multi_region=true -c github_repo=owner/tenantgate
